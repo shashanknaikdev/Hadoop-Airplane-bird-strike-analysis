@@ -1,0 +1,14 @@
+//Load the previous output file (details) into table
+Create external table details (Type int,Count Int,Name String,Lati Double, Longi Double) row format delimited fields terminated by ',' location '/user/cloudera/hiveInput/Details/'
+
+//load the bird strikes data into table
+Create external table Strikes (Type int,Name String,Altitude Int,Model String,WildlifeNoStruck Int,Other String) row format delimited fields terminated by ',' location '/user/cloudera/hiveInput/BirdStrikes/'
+
+//To find the sum of wildlife strike in each airport
+Create table AirportStrikes as Select Name, Sum(WildlifeNoStruck) From Strikes group by Name;
+
+//Match the airport names of both the files
+Create table BirdStrikeProof as Select AirportStrikes.Name, WildlifeStruck, Count From AirportStrikes, details Where UPPER(AirportStrikes.Name) = UPPER(details.Name);
+
+//Save the files from HDFS to Home directory
+INSERT OVERWRITE LOCAL DIRECTORY '/home/cloudera/BirdStrikeProof' ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' select * from BirdStrikeProof;

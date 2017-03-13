@@ -1,0 +1,42 @@
+//copying files from hpc.nyu.edu to Dumbo cluster
+scp combined_uniqueID ssn292@dumbo.es.its.nyu.edu:~
+
+//connecting to nyu Dumbo cluster using ssh
+$ ssh -X ssn292@dumbo.es.its.nyu.edu
+
+//create database
+create database ssn292;
+
+//use created database
+use ssn292;
+
+//load airport data(airports_usa) into table
+create external table port (AirportID int,Name string,City string,Country string,Lati double,Longi double,FAACode string,ICAO string,Altitude int,TimeZone int,DST string,TZ_DB string) row format delimited fields terminated by ',' location '/home/ssn292/hiveInput/airports';
+
+//load birdMigration data (combined_uniqueID) into table
+create external table bird (id bigint, countrynum int, statenum int, route int, active int, lati double, longi double, stratum int, bcr int, landtypeid int, routetypeid int, routetypedetailid int, routeid int,routedataid int, rpid int, year int,aou int, stop1 int) row format delimited fields terminated by '\t' location '/home/ssn292/hiveInput/bird';
+
+//modify bird data table to add a column "con" containing the concatenation of latitude and longitude
+create table birdconcat as select * from (select bird.*,concat(bird.lati,bird.longi) as con from bird) temp;
+
+//group by con    
+create table birdgrouped as select max(id),max(countrynum), max(statenum), max(route),max(active), max(lati),max(longi), max(stratum),max(bcr),max(landtypeid), max(routetypeid),max(routetypedetailid),max(routeid),max(routedataid),max(rpid),max(year),max(aou),sum(stop1),con from birdconcat group by con;
+
+//Cross Join 
+create table airbird_3 as select port.airportid,birdconcat.id
+from birdconcat,port
+where
+abs(port.lati-birdconcat.lati)<=0.2 AND abs(port.longi-birdconcat.longi)<=0.2;
+ 
+//save file from HDFS to $Home directory
+INSERT OVERWRITE LOCAL DIRECTORY '/home/ssns292/airbird' ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' select * from airbird_2;
+ 
+//copy file from Dumbo to HPC bastion
+scp /home/ssn292/hiveExport/000000_0 ssn292@hpc.nyu.edu:~
+
+//Table aircount - containing the sum of the counts of nearby bird population
+create table airCount as select a.airportid, sum(stop1) from airbird_3 a,birdconcat b where (a.id=b.id) group by a.airportid;
+
+//Table to create the airport details table which contains details of the selected airports for better analytics
+create table airportcountdetail as select ac.*,a.name,a.lati,a.longi from port a,aircount ac where (a.airportid=ac.airportid);
+

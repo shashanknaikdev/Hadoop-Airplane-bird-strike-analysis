@@ -1,0 +1,59 @@
+//cleaning bird migration data
+pig -x local
+
+table1 = LOAD '/home/cloudera/Project/State' AS (column1:chararray);
+
+STORE table INTO '/home/cloudera/Project/State/Combined' USING PigStorage();
+
+//Merging the part files to generate combined data file
+fs -getmerge /home/cloudera/Project/State/Combined /home/cloudera/Project/State/Single;
+
+tablefifty1 = LOAD '/home/cloudera/Project/fifty/Single' using PigStorage(',') AS (RouteDataID:chararray,countrynum:chararray,statenum:chararray,Route:chararray,RPID:chararray,year:chararray,AOU:chararray,Stop1:chararray,Stop2:chararray,Stop3:chararray,Stop4:chararray,Stop5:chararray,Stop6:chararray,Stop7:chararray,Stop8:chararray,Stop9:chararray,Stop10:chararray,Stop11:chararray,Stop12:chararray,Stop13:chararray,Stop14:chararray,Stop15:chararray,Stop16:chararray,Stop17:chararray,Stop18:chararray,Stop19:chararray,Stop20:chararray,Stop21:chararray,Stop22:chararray,Stop23:chararray,Stop24:chararray,Stop25:chararray,Stop26:chararray,Stop27:chararray,Stop28:chararray,Stop29:chararray,Stop30:chararray,Stop31:chararray,Stop32:chararray,Stop33:chararray,Stop34:chararray,Stop35:chararray,Stop36:chararray,Stop37:chararray,Stop38:chararray,Stop39:chararray,Stop40:chararray,Stop41:chararray,Stop42:chararray,Stop43:chararray,Stop44:chararray,Stop45:chararray,Stop46:chararray,Stop47:chararray,Stop48:chararray,Stop49:chararray,Stop50:chararray);
+ 
+tablefiftyColumns = Foreach tablefifty1 Generate RouteDataID, countrynum, statenum, Route, RPID, year, AOU, Stop1;
+ 
+ 
+  
+ 
+//cleaning airports data
+ AirportTable = LOAD '/home/cloudera/Project/Airports' USING PigStorage(',') AS (AirportID, Name, City, Country:CharArray, FAACode, ICAO, Latitude, Longitude, Altitude, TimeZone, DST, TZ_DB);
+ AirportsUSA = Filter AirportTable by Country == "United States"; 
+//
+
+
+//Join on Bird Routes data and Migration Data to gather geolocation co-ordinates
+ 
+RouteTable = LOAD '/home/cloudera/Project/join/routes.csv' Using PigStorage(',') as (countrynum:chararray, statenum:chararray, Route:chararray, Active:chararray, Lati:chararray, Longi:chararray, Stratum:chararray, BCR:chararray, LandTypeID:chararray, RouteTypeID:chararray, RouteTypeDetailId:chararray);
+ 
+FilteredBirdsTable = LOAD '/home/cloudera/Project/join/SingleFilteredBirdData' as (RouteDataID:chararray, countrynum:chararray, statenum:chararray, Route:chararray, RPID:chararray, year:chararray, AOU:chararray, Stop1:chararray);
+ 
+FilteredRouteTable = Filter RouteTable by countrynum == '840'; //840 is the country code for United States
+
+ConcatRTable = FOREACH RouteTable GENERATE countrynum, statenum, Route, Active, Lati, Longi, Stratum, BCR, LandTypeID, RouteTypeID, RouteTypeDetailId, CONCAT(statenum,Route) As RouteID; 
+
+ConcatBTable = FOREACH FilteredBirdsTable1 GENERATE RouteDataID, countrynum, statenum, Route, RPID, year, AOU, Stop1, CONCAT(statenum,Route) As RouteID; 
+JoinTable= join ConcatRTable by RouteID RIGHT OUTER, ConcatBtTable by RouteID;
+
+temp = LIMIT JoinedTab 10;
+
+Dump temp;
+	
+Store JoinedTable into '/home/cloudera/Project/join/JoinedTable';
+
+
+//Join Table schema below
+describe JoinedTable;
+
+JoinTable: {ConcatRTable::countrynum: chararray,ConcatRTable::statenum: chararray,ConcatRTable::Route: chararray,ConcatRTable::Active: chararray,ConcatRTable::Lati: chararray,ConcatRTable::Longi: chararray,ConcatRTable::Stratum: chararray,ConcatRTable::BCR: chararray,ConcatRTable::LandTypeID: chararray,ConcatRTable::RouteTypeID: chararray,ConcatRTable::RouteTypeDetailId: chararray,ConcatRTable::RouteID: chararray,ConcatBTable::RouteDataID: chararray,ConcatBTable::countrynum: chararray,ConcatBTable::statenum: chararray,ConcatBTable::Route: chararray,ConcatBTable::RPID: chararray,ConcatBTable::year: chararray,ConcatBTable::AOU: chararray,ConcatBTable::Stop1: chararray,ConcatBTable::RouteID: chararray}
+
+
+//Adjusting table schema by Concatenating the RouteDataID and AOU to generate unique Identifier for each row
+joinTable = LOAD 'home/cloudera/Project/join/JoinedTable/FinalJoin/JoinedTable' as (countrynum_R: chararray,statenum_R: chararray,Route_R: chararray,Active_R: chararray,Lati_R: chararray,Longi_R: chararray,Stratum_R: chararray,BCR_R: chararray,LandTypeID_R: chararray,RouteTypeID_R: chararray,RouteTypeDetailId_R: chararray,RouteID_R: chararray,RouteDataID: chararray,countrynum: chararray,statenum: chararray,Route: chararray,RPID: chararray,year: chararray,AOU: chararray,Stop1: chararray,RouteID: chararray);
+
+newTable = FOREACH joinTable GENERATE CONCAT(RouteDataID,AOU) as ID,countrynum_R,statenum_R,Route_R,Active_R,Lati_R,Longi_R,Stratum_R,BCR_R,LandTypeID_R,RouteTypeID_R,RouteTypeDetailId_R,RouteID_R,RouteDataID,RPID,year,AOU,Stop1;
+
+STORE newTable INTO '/home/cloudera/Project/Data/New' USING PigStorage();
+
+fs -getmerge /home/cloudera/Project/Data/New /home/cloudera/Project/Data/Combined;
+
+
